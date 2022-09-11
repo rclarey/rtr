@@ -6,32 +6,16 @@ export type Handler<T extends Ctx = Ctx> = (
   context: T,
 ) => Response | Promise<Response>;
 
-export type Middleware<Provides extends Ctx = Ctx, Requires extends Ctx = Ctx> =
-  (
-    handler: Handler<Provides & Requires>,
-  ) => Handler<Requires>;
-
-type RemoveIntersection<R, P> = Pick<
-  R,
-  {
-    [Key in keyof R]: Key extends keyof P ? P[Key] extends R[Key] ? never : Key
-      : Key;
-  }[keyof R]
->;
+export type Middleware<Provides extends Ctx, Requires extends Ctx> = (
+  h: Handler<Requires & Provides>,
+) => Handler<Requires>;
 
 // deno-lint-ignore no-explicit-any
-type ComposeMiddlewareTypes<T extends any[]> = T extends [] ? never
-  : ((...t: T) => void) extends ((
-    a: (
-      h: Handler<infer PR>,
-    ) => (r: Request, c: infer R1) => Response | Promise<Response>,
-    ...b: infer U
-  ) => void)
-    ? ComposeMiddlewareTypes<U> extends Middleware<infer P2, infer R2>
-      ? Middleware<
-        RemoveIntersection<PR & P2, R1>,
-        R1 & RemoveIntersection<R2, PR>
-      >
+type Compose<T extends any[]> = T extends [] ? never
+  : ((...t: T) => void) extends
+    ((a: Middleware<infer P1, infer R1>, ...b: infer U) => void)
+    ? Compose<U> extends Middleware<infer P2, infer R2>
+      ? Middleware<P1 & P2, R1 & Omit<R2, keyof P1>>
     : never
   : never;
 
@@ -44,16 +28,14 @@ export function composeMiddleware<
 >(
   ...middleware: T
 ) {
-  return <U extends Ctx>(
-    handler: Handler<U>,
-  ): ReturnType<ComposeMiddlewareTypes<[...T, Middleware<Ctx, U>]>> => {
+  // @ts-ignore-error
+  return <U extends Ctx>(handler: Handler<U>) => {
     let f = handler;
     for (let i = middleware.length - 1; i >= 0; i -= 1) {
       const m = middleware[i]!;
       f = m(f);
     }
-    // deno-lint-ignore no-explicit-any
-    return f as any;
+    return f as ReturnType<Compose<[...T, Middleware<Ctx, U>]>>;
   };
 }
 
