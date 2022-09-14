@@ -1,4 +1,6 @@
-// deno-lint-ignore ban-types
+// Copyright (C) 2022 Russell Clarey. All rights reserved. MIT license.
+
+// // deno-lint-ignore ban-types
 export type Ctx = object;
 
 export type Handler<T extends Ctx = Ctx> = (
