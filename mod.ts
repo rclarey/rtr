@@ -1,68 +1,14 @@
 // Copyright (C) 2022 Russell Clarey. All rights reserved. MIT license.
 
-// // deno-lint-ignore ban-types
-export type Ctx = object;
+import type {
+  Ctx,
+  Handler,
+  HttpMethod,
+  ParamsCtx,
+} from "./types.ts";
+export * from "./types.ts";
+export { composeMiddleware } from "./compose.ts";
 
-export type Handler<T extends Ctx = Ctx> = (
-  request: Request,
-  context: T,
-) => Response | Promise<Response>;
-
-export type Middleware<
-  Requires extends Ctx = Ctx,
-  Provides extends Ctx = Ctx,
-> = <T extends Ctx>(
-  h: Handler<T & Requires & Provides>,
-) => Handler<T & Requires>;
-
-type RemoveIntersection<R, P> = Pick<
-  R,
-  {
-    [Key in keyof R]: Key extends keyof P ? P[Key] extends R[Key] ? never : Key
-      : Key;
-  }[keyof R]
->;
-
-// deno-lint-ignore no-explicit-any
-type Compose<T extends any[]> = T extends [] ? never
-  : ((...t: T) => void) extends
-    ((a: Middleware<infer R1, infer P1>, ...b: infer U) => void)
-    ? Compose<U> extends Middleware<infer R2, infer P2>
-      ? Middleware<R1 & RemoveIntersection<R2, P1>, P1 & P2>
-    : never
-  : never;
-
-export function composeMiddleware<
-  T extends ((
-    // deno-lint-ignore no-explicit-any
-    h: Handler<any>,
-    // deno-lint-ignore no-explicit-any
-  ) => (r: Request, c: any) => Response | Promise<Response>)[],
->(
-  ...middleware: T
-): Compose<T> {
-  // @ts-ignore-error
-  return <U extends Ctx>(handler: Handler<U>) => {
-    let f = handler;
-    for (let i = middleware.length - 1; i >= 0; i -= 1) {
-      const m = middleware[i]!;
-      f = m(f);
-    }
-    // deno-lint-ignore no-explicit-any
-    return f as any;
-  };
-}
-
-export type HttpMethod =
-  | "GET"
-  | "HEAD"
-  | "POST"
-  | "PUT"
-  | "DELETE"
-  | "CONNECT"
-  | "OPTIONS"
-  | "TRACE"
-  | "PATCH";
 
 const HTTP_METHODS: HttpMethod[] = [
   "GET",
@@ -76,12 +22,6 @@ const HTTP_METHODS: HttpMethod[] = [
   "PATCH",
 ];
 
-export type Params = Record<string, string | undefined>;
-
-export interface ParamsCtx {
-  params: Params;
-}
-
 interface Leaf {
   path: string;
   handler: Handler<ParamsCtx>;
@@ -90,7 +30,7 @@ interface Leaf {
 
 type Node = Record<HttpMethod, Leaf | undefined> & {
   statics: Record<string, Node | undefined>;
-  param?: Node;
+  param?: { maxDepth: number, node: Node };
   wildcard?: Node;
 };
 
@@ -197,10 +137,10 @@ export class Router {
         wildcard = checking.wildcard;
       }
 
-      if (checking.param) {
+      if (checking.param && checking.param.maxDepth >= parts.length - i - 1) {
         params.push({
           part: i + 1,
-          node: checking.param,
+          node: checking.param.node,
         });
       }
 
@@ -244,7 +184,11 @@ export class Router {
       const params: Record<string, string> = {};
       for (let i = 0; i < leaf.paramList.length; i++) {
         const [key, ind] = leaf.paramList[i];
-        params[key] = parts[ind];
+        if (key === '*') {
+          params[key] = parts.slice(ind).join('/');
+        } else {
+          params[key] = parts[ind];
+        }
       }
       return leaf.handler(request, { ...ctx, params });
     } catch (error: unknown) {
@@ -273,10 +217,13 @@ export class Router {
         }
 
         if (part[0] === ":") {
-          node = node.param ??= newNode();
+          const param = node.param ??= { maxDepth: 0, node: newNode() };
+          param.maxDepth = Math.max(param.maxDepth, parts.length - ind- 1);
+          node = param.node;
           paramList.push([part.slice(1), ind]);
         } else if (part[0] === "*") {
           node = node.wildcard ??= newNode();
+          paramList.push(["*", ind]);
         } else {
           node = node.statics[part] ??= newNode();
         }
