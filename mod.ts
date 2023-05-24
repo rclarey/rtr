@@ -39,11 +39,23 @@ function newNode(): Node {
 }
 
 function trimAndSplit(path: string) {
-  const trimmed = path.replace(/^\/|\/$/g, "");
+  const start = path[0] === "/";
+  const end = path[path.length - 1] === "/";
+  const trimmed = path.slice(start ? 1 : 0, path.length - (end ? 1 : 0));
   return {
     trimmed,
     parts: trimmed.split("/"),
   };
+}
+
+function getPathFromUrl(url: string) {
+  const queryIndex = url.indexOf("?", 8);
+  const result = url.substring(
+    url.indexOf("/", 8),
+    queryIndex === -1 ? url.length : queryIndex,
+  );
+
+  return result;
 }
 
 export class Router {
@@ -162,7 +174,7 @@ export class Router {
 
   #handlerFunc = (request: Request, ctx: Ctx = {}) => {
     try {
-      const path = new URL(request.url).pathname;
+      const path = getPathFromUrl(request.url);
       const method = request.method.toUpperCase() as HttpMethod;
       const { node, parts } = this.#find(path);
       if (!node || !node.hasLeaf) {
