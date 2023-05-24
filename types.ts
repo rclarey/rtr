@@ -1,4 +1,4 @@
-// Copyright (C) 2022 Russell Clarey. All rights reserved. MIT license.
+// Copyright (C) 2022 - 2023 Russell Clarey. All rights reserved. MIT license.
 
 // deno-lint-ignore ban-types
 export type Ctx = object;

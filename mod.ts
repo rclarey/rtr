@@ -1,4 +1,4 @@
-// Copyright (C) 2022 Russell Clarey. All rights reserved. MIT license.
+// Copyright (C) 2022 - 2023 Russell Clarey. All rights reserved. MIT license.
 
 import type { Ctx, Handler, HttpMethod, ParamsCtx } from "./types.ts";
 export * from "./types.ts";
