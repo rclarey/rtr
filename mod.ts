@@ -1,14 +1,8 @@
 // Copyright (C) 2022 Russell Clarey. All rights reserved. MIT license.
 
-import type {
-  Ctx,
-  Handler,
-  HttpMethod,
-  ParamsCtx,
-} from "./types.ts";
+import type { Ctx, Handler, HttpMethod, ParamsCtx } from "./types.ts";
 export * from "./types.ts";
 export { composeMiddleware } from "./compose.ts";
-
 
 const HTTP_METHODS: HttpMethod[] = [
   "GET",
@@ -29,8 +23,9 @@ interface Leaf {
 }
 
 type Node = Record<HttpMethod, Leaf | undefined> & {
+  hasLeaf: boolean;
   statics: Record<string, Node | undefined>;
-  param?: { maxDepth: number, node: Node };
+  param?: { maxDepth: number; node: Node };
   wildcard?: Node;
 };
 
@@ -40,7 +35,7 @@ interface Candidate {
 }
 
 function newNode(): Node {
-  return { statics: {} } as Node;
+  return { statics: {}, hasLeaf: false } as Node;
 }
 
 function trimAndSplit(path: string) {
@@ -170,7 +165,7 @@ export class Router {
       const path = new URL(request.url).pathname;
       const method = request.method.toUpperCase() as HttpMethod;
       const { node, parts } = this.#find(path);
-      if (!node) {
+      if (!node || !node.hasLeaf) {
         return this.notFound(request, ctx);
       }
 
@@ -184,8 +179,8 @@ export class Router {
       const params: Record<string, string> = {};
       for (let i = 0; i < leaf.paramList.length; i++) {
         const [key, ind] = leaf.paramList[i];
-        if (key === '*') {
-          params[key] = parts.slice(ind).join('/');
+        if (key === "*") {
+          params[key] = parts.slice(ind).join("/");
         } else {
           params[key] = parts[ind];
         }
@@ -218,7 +213,7 @@ export class Router {
 
         if (part[0] === ":") {
           const param = node.param ??= { maxDepth: 0, node: newNode() };
-          param.maxDepth = Math.max(param.maxDepth, parts.length - ind- 1);
+          param.maxDepth = Math.max(param.maxDepth, parts.length - ind - 1);
           node = param.node;
           paramList.push([part.slice(1), ind]);
         } else if (part[0] === "*") {
@@ -237,6 +232,7 @@ export class Router {
         }" conflicts with the path "${path}" being added`,
       );
     }
+    node.hasLeaf = true;
     node[method] = {
       path,
       handler,
